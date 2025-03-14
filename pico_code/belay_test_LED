@@ -1,0 +1,33 @@
+import belay
+
+# Define your microcontroller connection
+DEVICE = "COM4"  # Change this to match your actual port
+supervisor = belay.Device(DEVICE)
+
+@supervisor.task
+def setup_ws2812():
+    import neopixel
+    from machine import Pin
+    import time
+
+    LED_PIN = 12  # Change to the GPIO pin where WS2812B is connected
+    NUM_LEDS = 6  # Adjust based on how many LEDs are connected
+
+    np = neopixel.NeoPixel(Pin(LED_PIN), NUM_LEDS)
+
+    def set_color(r, g, b):
+        """Set all LEDs to a given RGB color."""
+        for i in range(NUM_LEDS):
+            np[i] = (r, g, b)
+        np.write()
+
+    # Example: Turn LEDs Red, Green, Blue sequentially
+    set_color(255, 0, 0)  # RED
+    time.sleep(1)
+    set_color(0, 255, 0)  # GREEN
+    time.sleep(1)
+    set_color(0, 0, 255)  # BLUE
+    time.sleep(1)
+    set_color(255, 255, 255)  # WHITE
+
+setup_ws2812()  # Run the LED setup
