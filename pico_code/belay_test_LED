@@ -1,33 +1,43 @@
 import belay
 
-# Define your microcontroller connection
-DEVICE = "COM4"  # Change this to match your actual port
+# ✅ Define your microcontroller connection (Update COM port if needed)
+DEVICE = "COM4"  # Replace with your actual port (e.g., "COM5")
 supervisor = belay.Device(DEVICE)
 
 @supervisor.task
-def setup_ws2812():
+def ws2812_chase():
     import neopixel
     from machine import Pin
     import time
 
-    LED_PIN = 12  # Change to the GPIO pin where WS2812B is connected
-    NUM_LEDS = 6  # Adjust based on how many LEDs are connected
+    LED_PIN = 2  # Change to your actual WS2812B data pin
+    NUM_LEDS = 300  # Adjust based on your LED strip length
+    BRIGHTNESS = 10  # Adjust brightness (1 - 100%)
 
-    np = neopixel.NeoPixel(Pin(LED_PIN), NUM_LEDS)
+    # ✅ Initialize WS2812B LED strip
+    np = neopixel.NeoPixel(Pin(LED_PIN, Pin.OUT), NUM_LEDS)
 
-    def set_color(r, g, b):
-        """Set all LEDs to a given RGB color."""
-        for i in range(NUM_LEDS):
-            np[i] = (r, g, b)
-        np.write()
+    # ✅ Define colors for the chase effect
+    colors = [
+        (255, 0, 0),  # Red
+        (0, 255, 0),  # Green
+        (0, 0, 255),  # Blue
+        (255, 255, 0),  # Yellow
+        (0, 255, 255),  # Cyan
+        (255, 0, 255)   # Magenta
+    ]
 
-    # Example: Turn LEDs Red, Green, Blue sequentially
-    set_color(255, 0, 0)  # RED
-    time.sleep(1)
-    set_color(0, 255, 0)  # GREEN
-    time.sleep(1)
-    set_color(0, 0, 255)  # BLUE
-    time.sleep(1)
-    set_color(255, 255, 255)  # WHITE
+    # ✅ Function to apply brightness scaling
+    def apply_brightness(color, brightness):
+        scale = brightness / 100  # Convert percentage to scale factor
+        return (int(color[0] * scale), int(color[1] * scale), int(color[2] * scale))
 
-setup_ws2812()  # Run the LED setup
+    while True:
+        for shift in range(NUM_LEDS):  # Loop through each LED position
+            for i in range(NUM_LEDS):  # Set colors along the strip
+                color_index = (i + shift) % len(colors)  # Cycle through colors
+                np[i] = apply_brightness(colors[color_index], BRIGHTNESS)  # Apply brightness
+            np.write()
+            time.sleep(0.05)  # Adjust speed of chase effect
+
+ws2812_chase()  # Run the LED chase effect
