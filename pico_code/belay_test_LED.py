@@ -1,7 +1,7 @@
 import belay
 
 # ✅ Define your microcontroller connection (Update COM port if needed)
-DEVICE = "COM4"  # Replace with your actual port (e.g., "COM5")
+DEVICE = "COM6"  # Replace with your actual port (e.g., "COM5")
 supervisor = belay.Device(DEVICE)
 
 @supervisor.task
@@ -10,9 +10,9 @@ def ws2812_chase():
     from machine import Pin
     import time
 
-    LED_PIN = 2  # Change to your actual WS2812B data pin
+    LED_PIN = 27  # Change to your actual WS2812B data pin
     NUM_LEDS = 300  # Adjust based on your LED strip length
-    BRIGHTNESS = 10  # Adjust brightness (1 - 100%)
+    BRIGHTNESS = 30  # Adjust brightness (1 - 100%)
 
     # ✅ Initialize WS2812B LED strip
     np = neopixel.NeoPixel(Pin(LED_PIN, Pin.OUT), NUM_LEDS)

@@ -1,7 +1,7 @@
 import belay
 
 # Define your microcontroller connection (Update the port if needed)
-DEVICE = "COM4"  # Change to your actual port
+DEVICE = "COM6"  # Change to your actual port
 supervisor = belay.Device(DEVICE)
 
 @supervisor.task
@@ -10,17 +10,10 @@ def monitor_buttons():
     import time
 
     # Define button GPIO pins (Update these based on your wiring)
-    BUTTON_PINS = [1, 3, 5, 7, 9, 11]  # Data pins for buttons (GP1, GP3, GP5, etc.)
-    LED_PINS = [0, 2, 4, 6, 8, 10]  # LED control pins (GP0, GP2, GP4, etc.)
+    BUTTON_PINS = [1, 5, 9, 17, 13, 21]  # Data pins for buttons
 
     # Initialize buttons as inputs with pull-up resistors
     buttons = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in BUTTON_PINS]
-
-    # Initialize LEDs as outputs and turn them ON permanently
-    leds = [Pin(pin, Pin.OUT) for pin in LED_PINS]
-    
-    for led in leds:
-        led.value(1)  # Turn ON all LEDs at startup
 
     while True:
         button_states = [0 if button.value() else 1 for button in buttons]  # Read button states
