@@ -5,18 +5,15 @@ import belay
 import colorsys
 
 # Define your microcontroller connection (update COM port if needed)
-DEVICE = "COM6"  # Replace with your actual port (e.g., "COM5")
+DEVICE = "COM6"  # Replace with your actual port
 supervisor = belay.Device(DEVICE)
-
-# Global variable for chase effect shift
-chase_shift = 0
 
 @supervisor.task
 def update_led(led_colors):
     """
     Runs on the Pico.
     Receives a list of (R, G, B) tuples (one per LED) and updates the WS2812B LED strip.
-    In this version the LED strip is reinitialized on every update.
+    In this version, the LED strip is reinitialized on every update.
     """
     import neopixel
     from machine import Pin
@@ -41,12 +38,12 @@ def read_buttons():
     Each button is assumed to be connected with a pull-up resistor (0 = pressed, 1 = released).
     """
     from machine import Pin
-    # Define button GPIO pins (adjust based on your wiring)
+    # Define the GPIO pins for your arcade buttons (adjust based on your wiring)
     BUTTON_PINS = [1, 5, 9, 17, 13, 21]
     # Initialize button inputs with pull-up resistors.
     buttons = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in BUTTON_PINS]
     # Read and return the button states.
-    button_states = [0 if button.value() else 1 for button in buttons]
+    button_states = [0 if button.value() else 1 for button in buttons] 
     return button_states
 
 def capture_screen():
@@ -123,8 +120,10 @@ def enhance_color_saturation(rgb, factor=1.5):
     The input RGB values are expected to be in the 0-255 range.
     """
     r, g, b = rgb
+    # Normalize to [0,1]
     r_norm, g_norm, b_norm = r / 255.0, g / 255.0, b / 255.0
     h, s, v = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
+    # Increase saturation by factor (capped at 1.0)
     s = min(s * factor, 1.0)
     r_new, g_new, b_new = colorsys.hsv_to_rgb(h, s, v)
     return (int(r_new * 255), int(g_new * 255), int(b_new * 255))
@@ -147,63 +146,26 @@ def map_border_colors_to_leds(border_colors, num_leds, saturation_factor=1.5):
         led_colors.append(enhanced_color)
     return led_colors
 
-def is_valid_color(border_colors, std_threshold=10):
-    """
-    Checks if the computed border colors have sufficient variation.
-    If the maximum standard deviation across the R, G, and B channels is below the threshold,
-    valid color data is assumed to not be present.
-    """
-    all_colors = border_colors['top'] + border_colors['right'] + border_colors['bottom'] + border_colors['left']
-    arr = np.array(all_colors)
-    if np.std(arr, axis=0).max() < std_threshold:
-        return False
-    return True
-
-def default_chase_colors(shift, num_leds):
-    """
-    Returns a chase effect color list based on a default sequence of colors.
-    The shift parameter creates the moving effect.
-    """
-    default_colors = [
-        (255, 0, 0),    # Red
-        (0, 255, 0),    # Green
-        (0, 0, 255),    # Blue
-        (255, 255, 0),  # Yellow
-        (0, 255, 255),  # Cyan
-        (255, 0, 255)   # Magenta
-    ]
-    led_colors = []
-    for i in range(num_leds):
-        color_index = (i + shift) % len(default_colors)
-        led_colors.append(default_colors[color_index])
-    return led_colors
-
-# Main loop on the host: update the LED strip based on screen capture
-# and read the arcade button states.
+# Main loop on the host: update the LED strip based on screen capture and read arcade button states.
 if __name__ == "__main__":
     NUM_LEDS = 300         # Must match your LED strip's count
     UPDATE_INTERVAL = 0.1  # Seconds between updates
 
     while True:
-        # LED-sync section
+        # LED sync: Capture screen and compute LED colors from the borders.
         img = capture_screen()
         border_colors = get_border_colors(
             img,
-            border_thickness=20,   # Adjust based on your monitor's border size
+            border_thickness=20,   # Adjust for your monitor's border size
             segments_top=10,
             segments_bottom=10,
             segments_left=10,
             segments_right=10
         )
-        if is_valid_color(border_colors, std_threshold=10):
-            led_colors = map_border_colors_to_leds(border_colors, NUM_LEDS, saturation_factor=1.5)
-        else:
-            led_colors = default_chase_colors(chase_shift, NUM_LEDS)
-            chase_shift = (chase_shift + 1) % NUM_LEDS  # update shift for the chase effect
-        
+        led_colors = map_border_colors_to_leds(border_colors, NUM_LEDS, saturation_factor=1.5)
         update_led(led_colors)
 
-        # Button reading section
+        # Arcade button: Read and print the button states.
         button_states = read_buttons()
         print("Button states:", button_states)
 
