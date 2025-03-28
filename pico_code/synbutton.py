@@ -4,169 +4,112 @@ import numpy as np
 import belay
 import colorsys
 
-# Define your microcontroller connection (update COM port if needed)
-DEVICE = "COM6"  # Replace with your actual port
+# ✅ Define your microcontroller connection (update COM port if needed)
+DEVICE = "COM4"  # Replace with your actual port
 supervisor = belay.Device(DEVICE)
 
+NUM_LEDS_PER_STRIP = 66
+NUM_LEDS_TOTAL = NUM_LEDS_PER_STRIP * 2
+UPDATE_INTERVAL = 0  # Seconds between updates
+
 @supervisor.task
-def update_led(led_colors):
+def update_led_1(led_colors):
     """
-    Runs on the Pico.
-    Receives a list of (R, G, B) tuples (one per LED) and updates the WS2812B LED strip.
-    In this version, the LED strip is reinitialized on every update.
+    Updates LED strip 1 (66 LEDs) on GPIO 26.
     """
     import neopixel
     from machine import Pin
-    LED_PIN = 27       # Change to your actual WS2812B data pin
-    NUM_LEDS = 300     # Adjust based on your LED strip length
+    LED_PIN = 26
+    NUM_LEDS = 66
 
-    # Create a new neopixel object each call.
     np_strip = neopixel.NeoPixel(Pin(LED_PIN, Pin.OUT), NUM_LEDS)
-    
-    # If your LED strip expects GRB order, uncomment the following line:
-    # led_colors = [(g, r, b) for (r, g, b) in led_colors]
-    
+    for i in range(NUM_LEDS):
+        np_strip[i] = led_colors[i]
+    np_strip.write()
+
+@supervisor.task
+def update_led_2(led_colors):
+    """
+    Updates LED strip 2 (66 LEDs) on GPIO 27.
+    """
+    import neopixel
+    from machine import Pin
+    LED_PIN = 27
+    NUM_LEDS = 66
+
+    np_strip = neopixel.NeoPixel(Pin(LED_PIN, Pin.OUT), NUM_LEDS)
     for i in range(NUM_LEDS):
         np_strip[i] = led_colors[i]
     np_strip.write()
 
 @supervisor.task
 def read_buttons():
-    """
-    Runs on the Pico.
-    Reads the arcade button states once and returns a list.
-    Each button is assumed to be connected with a pull-up resistor (0 = pressed, 1 = released).
-    """
     from machine import Pin
-    # Define the GPIO pins for your arcade buttons (adjust based on your wiring)
     BUTTON_PINS = [1, 5, 9, 17, 13, 21]
-    # Initialize button inputs with pull-up resistors.
     buttons = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in BUTTON_PINS]
-    # Read and return the button states.
-    button_states = [0 if button.value() else 1 for button in buttons] 
-    return button_states
+    return [0 if button.value() else 1 for button in buttons]
 
 def capture_screen():
-    """
-    Captures the primary monitor's screenshot and returns it as a NumPy array in RGB format.
-    """
     with mss.mss() as sct:
-        monitor = sct.monitors[1]  # Primary monitor
+        monitor = sct.monitors[1]
         sct_img = sct.grab(monitor)
-        # The image is in BGRA format; drop the alpha channel and convert to RGB.
-        img = np.array(sct_img)
-        img = img[:, :, :3]
-        img = img[..., ::-1]
+        img = np.array(sct_img)[:, :, :3][..., ::-1]  # Convert BGRA to RGB
         return img
 
 def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom=10,
                       segments_left=10, segments_right=10):
-    """
-    Divides the image's borders into segments and computes an average RGB color for each.
-    Returns a dictionary with keys "top", "bottom", "left", "right" mapping to lists of RGB tuples.
-    """
     height, width, _ = img.shape
     result = {}
 
-    # Top border
+    def segment_colors(border, axis_segments, is_vertical=False):
+        seg_size = border.shape[1] // axis_segments if not is_vertical else border.shape[0] // axis_segments
+        colors = []
+        for i in range(axis_segments):
+            start = i * seg_size
+            if i == axis_segments - 1:
+                segment = border[:, start:] if not is_vertical else border[start:, :]
+            else:
+                segment = border[:, start:start + seg_size] if not is_vertical else border[start:start + seg_size, :]
+            avg_color = np.mean(segment.reshape(-1, 3), axis=0)
+            colors.append(tuple(avg_color.astype(int)))
+        return colors
+
     top_border = img[0:border_thickness, :, :]
-    seg_width_top = width // segments_top
-    top_colors = []
-    for i in range(segments_top):
-        start = i * seg_width_top
-        segment = top_border[:, start: width if i == segments_top - 1 else start + seg_width_top, :]
-        avg_color = np.mean(segment.reshape(-1, 3), axis=0)
-        top_colors.append(tuple(avg_color.astype(int)))
-    result['top'] = top_colors
-
-    # Bottom border
     bottom_border = img[height - border_thickness: height, :, :]
-    seg_width_bottom = width // segments_bottom
-    bottom_colors = []
-    for i in range(segments_bottom):
-        start = i * seg_width_bottom
-        segment = bottom_border[:, start: width if i == segments_bottom - 1 else start + seg_width_bottom, :]
-        avg_color = np.mean(segment.reshape(-1, 3), axis=0)
-        bottom_colors.append(tuple(avg_color.astype(int)))
-    result['bottom'] = bottom_colors
-
-    # Left border
     left_border = img[:, 0:border_thickness, :]
-    seg_height_left = height // segments_left
-    left_colors = []
-    for i in range(segments_left):
-        start = i * seg_height_left
-        segment = left_border[start: height if i == segments_left - 1 else start + seg_height_left, :, :]
-        avg_color = np.mean(segment.reshape(-1, 3), axis=0)
-        left_colors.append(tuple(avg_color.astype(int)))
-    result['left'] = left_colors
-
-    # Right border
     right_border = img[:, width - border_thickness: width, :]
-    seg_height_right = height // segments_right
-    right_colors = []
-    for i in range(segments_right):
-        start = i * seg_height_right
-        segment = right_border[start: height if i == segments_right - 1 else start + seg_height_right, :, :]
-        avg_color = np.mean(segment.reshape(-1, 3), axis=0)
-        right_colors.append(tuple(avg_color.astype(int)))
-    result['right'] = right_colors
+
+    result['top'] = segment_colors(top_border, segments_top)
+    result['bottom'] = segment_colors(bottom_border, segments_bottom)
+    result['left'] = segment_colors(left_border, segments_left, is_vertical=True)
+    result['right'] = segment_colors(right_border, segments_right, is_vertical=True)
 
     return result
 
 def enhance_color_saturation(rgb, factor=1.5):
-    """
-    Increases the saturation of an RGB color by the given factor.
-    The input RGB values are expected to be in the 0-255 range.
-    """
     r, g, b = rgb
-    # Normalize to [0,1]
     r_norm, g_norm, b_norm = r / 255.0, g / 255.0, b / 255.0
     h, s, v = colorsys.rgb_to_hsv(r_norm, g_norm, b_norm)
-    # Increase saturation by factor (capped at 1.0)
     s = min(s * factor, 1.0)
     r_new, g_new, b_new = colorsys.hsv_to_rgb(h, s, v)
     return (int(r_new * 255), int(g_new * 255), int(b_new * 255))
 
 def map_border_colors_to_leds(border_colors, num_leds, saturation_factor=1.5):
-    """
-    Creates a full LED color list by concatenating the border segments (top, right, bottom, left)
-    and repeating the sequence until the number of LEDs is reached.
-    Each color is enhanced to increase its saturation.
-    """
     colors_sequence = (border_colors['top'] +
                        border_colors['right'] +
                        border_colors['bottom'] +
                        border_colors['left'])
-    num_segments = len(colors_sequence)
     led_colors = []
     for i in range(num_leds):
-        base_color = colors_sequence[i % num_segments]
-        enhanced_color = enhance_color_saturation(base_color, factor=saturation_factor)
-        led_colors.append(enhanced_color)
+        base_color = colors_sequence[i % len(colors_sequence)]
+        led_colors.append(enhance_color_saturation(base_color, factor=saturation_factor))
     return led_colors
 
-# Main loop on the host: update the LED strip based on screen capture and read arcade button states.
+# ✅ Main loop
 if __name__ == "__main__":
-    NUM_LEDS = 300         # Must match your LED strip's count
-    UPDATE_INTERVAL = 0.1  # Seconds between updates
-
     while True:
-        # LED sync: Capture screen and compute LED colors from the borders.
         img = capture_screen()
-        border_colors = get_border_colors(
-            img,
-            border_thickness=20,   # Adjust for your monitor's border size
-            segments_top=10,
-            segments_bottom=10,
-            segments_left=10,
-            segments_right=10
-        )
-        led_colors = map_border_colors_to_leds(border_colors, NUM_LEDS, saturation_factor=1.5)
-        update_led(led_colors)
+        border_colors = get_border_colors(img)
+        led_colors = map_border_colors_to_leds(border_colors, NUM_LEDS_TOTAL)
 
-        # Arcade button: Read and print the button states.
-        button_states = read_buttons()
-        print("Button states:", button_states)
-
-        time.sleep(UPDATE_INTERVAL)
+        # Split into two 66-LED segments
