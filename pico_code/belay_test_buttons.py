@@ -1,7 +1,7 @@
 import belay
 
 # Define your microcontroller connection (Update the port if needed)
-DEVICE = "COM6"  # Change to your actual port
+DEVICE = "COM4"  # Change to your actual port
 supervisor = belay.Device(DEVICE)
 
 @supervisor.task
