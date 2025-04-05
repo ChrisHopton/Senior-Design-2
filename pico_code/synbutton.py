@@ -54,7 +54,7 @@ def read_buttons():
     Each button is assumed to be connected with a pull-up resistor.
     """
     from machine import Pin
-    BUTTON_PINS = [1, 5, 9, 17, 13, 21]
+    BUTTON_PINS = [5, 1, 9, 13, 17, 21]
     buttons = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in BUTTON_PINS]
     button_states = [0 if button.value() else 1 for button in buttons]
     return button_states
