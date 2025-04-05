@@ -8,7 +8,7 @@ import colorsys
 DEVICE = "COM4"  # Replace with your actual port
 supervisor = belay.Device(DEVICE)
 
-# Global chase effect configuration.
+# Global configuration for chase effect and border detection.
 CHASE_COLORS = [
     (10, 10, 30),      # Void Black-Blue (deep space)
     (25, 25, 112),     # Midnight Blue (classic space tone)
@@ -19,14 +19,15 @@ CHASE_COLORS = [
     (80, 0, 80),       # Distant Nebula Purple (low glow)
     (169, 169, 169)    # Dim Star Silver (subtle star shimmer)
 ]
-CHASE_BRIGHTNESS = 100  # 100% brightness for the chase effect
+# Increase chase brightness to 200 (i.e. scale chase colors by 2) so they appear brighter.
+CHASE_BRIGHTNESS = 200    
+DETECTION_THRESHOLD = 10  # If average brightness is below this, assume no content is playing
 
 @supervisor.task
 def update_led(led_colors):
     """
     Runs on the Pico.
     Receives a list of (R, G, B) tuples (one per LED) and updates two WS2812B LED strips.
-    In this version, both LED strips are reinitialized on every update.
     """
     import neopixel
     from machine import Pin
@@ -50,16 +51,14 @@ def read_buttons():
     """
     Runs on the Pico.
     Reads the arcade button states once and returns a list.
-    Each button is assumed to be connected with a pull-up resistor (0 = pressed, 1 = released).
+    Each button is assumed to be connected with a pull-up resistor.
     """
     from machine import Pin
-    # Define the GPIO pins for your arcade buttons (adjust based on your wiring)
     BUTTON_PINS = [1, 5, 9, 17, 13, 21]
     buttons = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in BUTTON_PINS]
-    button_states = [0 if button.value() else 1 for button in buttons] 
+    button_states = [0 if button.value() else 1 for button in buttons]
     return button_states
 
-# The following functions remain available in case you need them later.
 def capture_screen():
     """
     Captures the primary monitor's screenshot and returns it as a NumPy array in RGB format.
@@ -68,8 +67,8 @@ def capture_screen():
         monitor = sct.monitors[1]  # Primary monitor
         sct_img = sct.grab(monitor)
         img = np.array(sct_img)
-        img = img[:, :, :3]
-        img = img[..., ::-1]
+        img = img[:, :, :3]      # Drop alpha channel.
+        img = img[..., ::-1]      # Convert BGRA to RGB.
         return img
 
 def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom=10,
@@ -81,7 +80,7 @@ def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom
     height, width, _ = img.shape
     result = {}
 
-    # Top border
+    # Top border.
     top_border = img[0:border_thickness, :, :]
     seg_width_top = width // segments_top
     top_colors = []
@@ -92,7 +91,7 @@ def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom
         top_colors.append(tuple(avg_color.astype(int)))
     result['top'] = top_colors
 
-    # Bottom border
+    # Bottom border.
     bottom_border = img[height - border_thickness: height, :, :]
     seg_width_bottom = width // segments_bottom
     bottom_colors = []
@@ -103,7 +102,7 @@ def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom
         bottom_colors.append(tuple(avg_color.astype(int)))
     result['bottom'] = bottom_colors
 
-    # Left border
+    # Left border.
     left_border = img[:, 0:border_thickness, :]
     seg_height_left = height // segments_left
     left_colors = []
@@ -114,7 +113,7 @@ def get_border_colors(img, border_thickness=20, segments_top=10, segments_bottom
         left_colors.append(tuple(avg_color.astype(int)))
     result['left'] = left_colors
 
-    # Right border
+    # Right border.
     right_border = img[:, width - border_thickness: width, :]
     seg_height_right = height // segments_right
     right_colors = []
@@ -156,10 +155,12 @@ def map_border_colors_to_leds(border_colors, num_leds, saturation_factor=1.5):
 
 def apply_brightness(color, brightness):
     """
-    Applies brightness scaling to a given color.
+    Applies brightness scaling to a given color, clipping any value above 255.
     """
     scale = brightness / 100.0
-    return (int(color[0] * scale), int(color[1] * scale), int(color[2] * scale))
+    return (min(int(color[0] * scale), 255),
+            min(int(color[1] * scale), 255),
+            min(int(color[2] * scale), 255))
 
 def get_chase_led_colors(num_leds, shift, brightness=CHASE_BRIGHTNESS):
     """
@@ -174,16 +175,35 @@ def get_chase_led_colors(num_leds, shift, brightness=CHASE_BRIGHTNESS):
         led_colors.append(scaled_color)
     return led_colors
 
-# Main loop: always use the chase effect as the default.
+# Main loop: use border detection if the screen shows active content,
+# otherwise default to the chase effect.
 if __name__ == "__main__":
-    NUM_LEDS = 300         # Must match your LED strip's count (per strip)
+    NUM_LEDS = 66         # Must match your LED strip's count (per strip)
     UPDATE_INTERVAL = 0.1  # Seconds between updates
     chase_shift = 0        # Initialize the shift for the chase effect
 
     while True:
-        # Always use the chase effect (ignoring border detection).
-        led_colors = get_chase_led_colors(NUM_LEDS, chase_shift, brightness=CHASE_BRIGHTNESS)
-        chase_shift = (chase_shift + 1) % len(CHASE_COLORS)
+        # Capture the screen and compute border colors.
+        img = capture_screen()
+        border_colors = get_border_colors(
+            img,
+            border_thickness=20,
+            segments_top=10,
+            segments_bottom=10,
+            segments_left=10,
+            segments_right=10
+        )
+        # Map the border colors to an LED color list.
+        led_colors_from_border = map_border_colors_to_leds(border_colors, NUM_LEDS, saturation_factor=1.5)
+        # Compute overall brightness of the border-derived colors.
+        avg_brightness = np.mean([sum(color) for color in led_colors_from_border])
+        
+        # If the average brightness is low, assume no active content and use the chase effect.
+        if avg_brightness < DETECTION_THRESHOLD:
+            led_colors = get_chase_led_colors(NUM_LEDS, chase_shift, brightness=CHASE_BRIGHTNESS)
+            chase_shift = (chase_shift + 1) % len(CHASE_COLORS)
+        else:
+            led_colors = led_colors_from_border
 
         update_led(led_colors)
         button_states = read_buttons()
